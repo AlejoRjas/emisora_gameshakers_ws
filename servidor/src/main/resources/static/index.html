@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GameShakers Chat</title>
+<style>
+  :root {
+    --fondo: #14121F; --tarjeta: #1F1C2E; --borde: #2E2A44; --texto: #ECEAF5; --suave: #9A96B5;
+    --acento: #FF3D7F; --acento2: #7C4DFF; --aviso: #FFC83D;
+    --xbox: #107C10; --playstation: #006FCD; --steam: #2A475E;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--fondo); color: var(--texto); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; }
+  header { background: linear-gradient(120deg, var(--acento2), var(--acento)); padding: 14px 20px; display: flex; align-items: center; gap: 14px; }
+  header h1 { margin: 0; font-size: 22px; }
+  header p { margin: 2px 0 0; font-size: 13px; opacity: .85; }
+  .estado { margin-left: auto; background: rgba(0,0,0,.25); border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .punto { width: 9px; height: 9px; border-radius: 50%; background: #bbb; }
+  .conectado .punto { background: #2EE59D; animation: latir 1.2s infinite; }
+  @keyframes latir { 50% { opacity: .35; } }
+
+  main { flex: 1; display: grid; grid-template-columns: 240px 1fr 220px; gap: 16px; padding: 16px; min-height: 0; }
+  .tarjeta { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+  .titulo { font-size: 11px; font-weight: 700; letter-spacing: .08em; color: var(--suave); text-transform: uppercase; margin: 0 0 10px; }
+
+  .salas { display: flex; flex-direction: column; gap: 10px; }
+  .sala { border: 0; border-radius: 14px; padding: 12px 14px; color: #fff; text-align: left; cursor: pointer; font: inherit; opacity: .7; transition: transform .1s, opacity .15s; }
+  .sala:hover { opacity: .9; transform: translateY(-1px); }
+  .sala.activa { opacity: 1; outline: 2.5px solid #fff; }
+  .sala b { display: block; font-size: 16px; }
+  .sala small { opacity: .85; }
+  .sala[data-sala=xbox] { background: linear-gradient(120deg, #1aa51a, var(--xbox)); }
+  .sala[data-sala=playstation] { background: linear-gradient(120deg, #1a8cf0, var(--playstation)); }
+  .sala[data-sala=steam] { background: linear-gradient(120deg, #3d6787, var(--steam)); }
+
+  .franja { border-radius: 12px; padding: 10px 14px; font-size: 19px; font-weight: 700; color: #fff; margin-bottom: 10px; background: var(--borde); }
+  #mensajes { flex: 1; overflow-y: auto; border: 1px solid var(--borde); border-radius: 10px; padding: 10px 12px; line-height: 1.5; font-size: 15px; min-height: 0; overflow-wrap: anywhere; }
+  .msg .hora { color: var(--suave); font-size: 12px; margin-right: 6px; }
+  .msg .autor { font-weight: 700; margin-right: 4px; }
+  .aviso { color: var(--aviso); font-size: 14px; }
+  form.escribir { display: flex; gap: 8px; margin-top: 10px; }
+  input { background: #16141F; border: 1px solid var(--borde); color: var(--texto); border-radius: 10px; padding: 11px 12px; font: inherit; font-size: 15px; min-width: 0; }
+  input:focus { outline: 2px solid var(--acento); border-color: transparent; }
+  button.principal { background: var(--acento); color: #fff; border: 0; border-radius: 10px; padding: 0 18px; font: inherit; font-weight: 700; cursor: pointer; min-height: 44px; }
+  button.principal:hover { filter: brightness(1.1); }
+  button:disabled, input:disabled { opacity: .5; cursor: not-allowed; }
+  #texto { flex: 1; }
+
+  #personas { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
+  #personas li { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-weight: 600; }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; color: #fff; flex: none; }
+  .tu { color: var(--acento); font-weight: 400; font-size: 13px; }
+  #cuantos { font-weight: 700; margin-bottom: 8px; }
+
+  /* Ventana para entrar */
+  #entrada { position: fixed; inset: 0; background: rgba(10, 8, 20, .85); display: grid; place-items: center; padding: 16px; z-index: 10; }
+  #entrada .caja { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 20px; padding: 26px; width: min(420px, 100%); }
+  #entrada h2 { margin: 0 0 4px; } #entrada p { color: var(--suave); margin: 0 0 18px; }
+  #entrada input { width: 100%; margin-bottom: 14px; }
+  #elegir { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+  #elegir .sala { padding: 10px; text-align: center; font-size: 14px; }
+  #entrada button.principal { width: 100%; }
+  #error { color: var(--aviso); min-height: 20px; margin: 10px 0 0; font-size: 14px; }
+  .oculto { display: none !important; }
+
+  /* Celular: salas arriba en fila, personas debajo */
+  @media (max-width: 820px) {
+    main { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; padding: 10px; gap: 10px; }
+    .salas { flex-direction: row; } .sala { flex: 1; padding: 8px; text-align: center; } .sala b { font-size: 14px; }
+    #colPersonas { max-height: 140px; }
+    header h1 { font-size: 18px; } header p { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>GameShakers Chat</h1>
+    <p id="subtitulo">3 salas: Xbox · PlayStation · PC Steam</p>
+  </div>
+  <div class="estado" id="estado"><span class="punto"></span><span id="estadoTexto">SIN CONEXIÓN</span></div>
+</header>
+
+<main>
+  <section class="tarjeta">
+    <p class="titulo">Salas</p>
+    <div class="salas" id="salas"></div>
+  </section>
+
+  <section class="tarjeta">
+    <div class="franja" id="franja">Elige una sala</div>
+    <div id="mensajes" aria-live="polite"></div>
+    <form class="escribir" id="formTexto" autocomplete="off">
+      <input id="texto" maxlength="300" placeholder="Escribe un mensaje…" disabled>
+      <button class="principal" id="btnEnviar" disabled>Enviar</button>
+    </form>
+  </section>
+
+  <section class="tarjeta" id="colPersonas">
+    <p class="titulo">En esta sala</p>
+    <div id="cuantos">—</div>
+    <ul id="personas"></ul>
+  </section>
+</main>
+
+<div id="entrada">
+  <form class="caja" id="formEntrar" autocomplete="off">
+    <h2>GameShakers Chat</h2>
+    <p>Escribe tu nombre y elige una sala.</p>
+    <input id="nombre" maxlength="24" placeholder="Tu nombre" required autofocus>
+    <div id="elegir"></div>
+    <button class="principal" id="btnEntrar">Entrar al chat</button>
+    <p id="error"></p>
+  </form>
+</div>
+
+<script>
+// Mismo protocolo que el cliente de escritorio (chat.jar): mensajes de texto con campos separados por |
+const SALAS = [
+  { id: 'xbox', titulo: 'Xbox', color: '#107C10' },
+  { id: 'playstation', titulo: 'PlayStation', color: '#006FCD' },
+  { id: 'steam', titulo: 'PC · Steam', color: '#2A475E' },
+];
+const $ = id => document.getElementById(id);
+let ws = null, miNombre = '', salaActual = null, salaElegida = 'xbox', rechazo = null, latido = null;
+
+// Botones de sala (barra lateral y ventana de entrada)
+for (const s of SALAS) {
+  $('salas').append(botonSala(s, () => cambiarSala(s.id), true));
+  $('elegir').append(botonSala(s, () => { salaElegida = s.id; marcar(); }, false));
+}
+function botonSala(s, alClic, conConteo) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'sala'; b.dataset.sala = s.id;
+  b.innerHTML = '<b></b>' + (conConteo ? '<small>—</small>' : '');
+  b.querySelector('b').textContent = s.titulo;
+  b.onclick = alClic;
+  return b;
+}
+function marcar() {
+  document.querySelectorAll('#elegir .sala').forEach(b => b.classList.toggle('activa', b.dataset.sala === salaElegida));
+  document.querySelectorAll('#salas .sala').forEach(b => b.classList.toggle('activa', b.dataset.sala === salaActual));
+  const s = SALAS.find(x => x.id === salaActual);
+  $('franja').textContent = s ? 'Sala ' + s.titulo : 'Elige una sala';
+  $('franja').style.background = s ? `linear-gradient(90deg, ${s.color}, ${s.color}cc)` : '';
+}
+marcar();
+
+$('formEntrar').onsubmit = e => { e.preventDefault(); entrar(); };
+$('formTexto').onsubmit = e => {
+  e.preventDefault();
+  const t = $('texto').value.trim();
+  if (t && ws && ws.readyState === WebSocket.OPEN) ws.send('CHAT|' + t);
+  $('texto').value = '';
+};
+
+function entrar() {
+  miNombre = $('nombre').value.replace(/[|;,]/g, ' ').trim().slice(0, 24);
+  if (!miNombre) return;
+  $('error').textContent = '';
+  $('btnEntrar').disabled = true;
+  $('btnEntrar').textContent = 'Conectando… (si el servidor estaba dormido puede tardar ~1 min)';
+  rechazo = null;
+  // misma dirección de la página: wss:// en https (Render), ws:// en local
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/chat');
+  ws.onopen = () => ws.send(`ENTRAR|${salaElegida}|${miNombre}`);
+  ws.onmessage = e => procesar(e.data);
+  ws.onclose = () => cerrada();
+}
+
+function cambiarSala(id) {
+  if (ws && ws.readyState === WebSocket.OPEN && salaActual && id !== salaActual) ws.send('CAMBIAR|' + id);
+}
+
+function procesar(linea) {
+  const p = linea.split('|');
+  switch (p[0]) {
+    case 'BIENVENIDO':
+      salaActual = p[1]; salaElegida = p[1];
+      $('entrada').classList.add('oculto');
+      $('mensajes').innerHTML = '';
+      aviso('Entraste a la sala ' + SALAS.find(s => s.id === salaActual).titulo + '. Estos son sus mensajes recientes:');
+      $('texto').disabled = $('btnEnviar').disabled = false;
+      $('texto').focus();
+      estado(true);
+      marcar();
+      // mantiene viva la conexión aunque nadie escriba (el servidor ignora PING)
+      clearInterval(latido); latido = setInterval(() => ws && ws.readyState === WebSocket.OPEN && ws.send('PING'), 25000);
+      break;
+    case 'RECHAZO':
+      rechazo = p.slice(1).join('|');
+      break;
+    case 'SALAS':
+      for (const par of p.slice(1)) {
+        const [id, n] = par.split(';');
+        const b = document.querySelector(`#salas .sala[data-sala="${id}"] small`);
+        if (b) b.textContent = n === '1' ? '1 persona' : n + ' personas';
+      }
+      break;
+    case 'USUARIOS':
+      if (p[1] === salaActual) personas(p[2] ? p[2].split(',') : []);
+      break;
+    case 'CHAT': {
+      // CHAT|sala|hora|autor|texto (el texto puede contener |)
+      const [, sala, hora, autor] = p;
+      if (sala === salaActual) mensaje(hora, autor, p.slice(4).join('|'));
+      break;
+    }
+    case 'AVISO':
+      aviso(p.slice(1).join('|'));
+      break;
+  }
+}
+
+function mensaje(hora, autor, texto) {
+  const div = document.createElement('div');
+  div.className = 'msg';
+  const mio = autor.toLowerCase() === miNombre.toLowerCase();
+  const h = document.createElement('span'); h.className = 'hora'; h.textContent = hora;
+  const a = document.createElement('span'); a.className = 'autor';
+  a.textContent = autor + (mio ? ' (tú)' : '') + ':';
+  a.style.color = mio ? 'var(--acento)' : colorDe(autor);
+  const t = document.createElement('span'); t.textContent = texto;   // textContent: nunca se interpreta como HTML
+  div.append(h, a, t);
+  agregar(div);
+}
+function aviso(texto) {
+  const div = document.createElement('div');
+  div.className = 'aviso'; div.textContent = '• ' + texto;
+  agregar(div);
+}
+function agregar(nodo) {
+  const m = $('mensajes');
+  const abajo = m.scrollHeight - m.scrollTop - m.clientHeight < 40;
+  m.append(nodo);
+  if (abajo) m.scrollTop = m.scrollHeight;
+}
+function personas(nombres) {
+  $('cuantos').textContent = nombres.length === 1 ? '1 persona' : nombres.length + ' personas';
+  const ul = $('personas'); ul.innerHTML = '';
+  for (const n of nombres) {
+    const li = document.createElement('li');
+    const av = document.createElement('span'); av.className = 'avatar';
+    av.textContent = n.charAt(0).toUpperCase();
+    const yo = n.toLowerCase() === miNombre.toLowerCase();
+    av.style.background = yo ? 'var(--acento)' : colorDe(n);
+    const nom = document.createElement('span'); nom.textContent = n;
+    li.append(av, nom);
+    if (yo) { const tu = document.createElement('span'); tu.className = 'tu'; tu.textContent = 'tú'; li.append(tu); }
+    ul.append(li);
+  }
+}
+function colorDe(texto) {
+  let h = 0; for (const c of texto) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return `hsl(${h % 360} 70% 65%)`;
+}
+function estado(conectado) {
+  $('estado').classList.toggle('conectado', conectado);
+  $('estadoTexto').textContent = conectado ? 'CONECTADO' : 'SIN CONEXIÓN';
+  const s = SALAS.find(x => x.id === salaActual);
+  $('subtitulo').textContent = conectado && s ? `${miNombre} · Sala ${s.titulo}` : '3 salas: Xbox · PlayStation · PC Steam';
+}
+function cerrada() {
+  clearInterval(latido);
+  const estaba = salaActual !== null;
+  salaActual = null; ws = null;
+  estado(false); marcar();
+  $('texto').disabled = $('btnEnviar').disabled = true;
+  document.querySelectorAll('#salas small').forEach(s => s.textContent = '—');
+  personas([]); $('cuantos').textContent = '—';
+  $('btnEntrar').disabled = false;
+  $('btnEntrar').textContent = 'Entrar al chat';
+  $('error').textContent = rechazo || (estaba ? 'Se perdió la conexión con el servidor. Vuelve a entrar.'
+                                              : 'No se pudo conectar con el servidor. Inténtalo de nuevo en unos segundos.');
+  if (estaba) aviso($('error').textContent);
+  $('entrada').classList.remove('oculto');
+}
+</script>
+</body>
+</html>

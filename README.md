@@ -1,11 +1,14 @@
 # GameShakers Chat · WebSocket (Spring Boot)
 
 Chat con **tres salas**: **Xbox**, **PlayStation** y **PC · Steam**, sobre **WebSocket**.
-Un servidor Spring Boot aloja las salas; cada persona usa el cliente de escritorio `chat.jar`, elige sala, chatea, ve quién está y puede cambiarse de sala.
+Un servidor Spring Boot aloja las salas. Cada persona elige sala, chatea, ve quién está y puede cambiarse de sala:
+
+- **Desde el navegador, sin instalar nada**: abre el enlace del servidor (p. ej. https://emisora-gameshakers-ws.onrender.com/). Funciona en computador y celular.
+- **O con el cliente de escritorio** `chat.jar` (Java), conectado al mismo servidor: todos están en las mismas salas.
 
 | Carpeta | Programa | Genera |
 |---|---|---|
-| [`servidor/`](servidor) | Servidor Spring Boot + WebSocket (Kafka opcional) | `servidor.jar` |
+| [`servidor/`](servidor) | Servidor Spring Boot + WebSocket (Kafka opcional) + chat web en `/` | `servidor.jar` |
 | [`chat/`](chat) | Cliente de chat de escritorio (Java Swing) | `chat.jar` |
 | [`kafka/`](kafka) | Configuración y scripts para usar Kafka (opcional) | — |
 | `Dockerfile`, `render.yaml` | Para publicar el servidor en Render | — |
@@ -13,12 +16,12 @@ Un servidor Spring Boot aloja las salas; cada persona usa el cliente de escritor
 ## Arquitectura
 
 ```
-  chat.jar (Ana)  ─┐                         ┌──────────── SERVIDOR (Spring Boot) ─────────────┐
-  chat.jar (Luis) ─┼── WebSocket /chat ────► │  ChatHandler → SalasChat                        │
+  navegador (Ana) ─┐                         ┌──────────── SERVIDOR (Spring Boot) ─────────────┐
+  celular (Luis)  ─┼── WebSocket /chat ────► │  ChatHandler → SalasChat                        │
   chat.jar (...)  ─┘   ws:// o wss://        │   Xbox │ PlayStation │ PC·Steam                  │
         ▲                                    │   (usuarios + historial de cada sala)          │
         └──── mensajes de SU sala ◄──────────│   Difusor: memoria  ─o─  Kafka (opcional)      │
-                                             │   GET /  y  /api/salas: estado en el navegador  │
+                                             │   /  chat web · /estado · /api/salas            │
                                              └─────────────────────────────────────────────────┘
 ```
 
@@ -26,18 +29,20 @@ Un servidor Spring Boot aloja las salas; cada persona usa el cliente de escritor
   - **En memoria** (por defecto): no hay que instalar nada; es lo que se usa en Render.
   - **Kafka** (opcional): se publica en el tema `gameshakers.chat` (clave = sala) y se reparte al consumirlo; el historial queda guardado y se recupera si el servidor se reinicia.
 - Al entrar o cambiar de sala se reciben los **últimos 50 mensajes** de esa sala.
-- La página **`/`** del servidor muestra en el navegador las 3 salas, quién está y cuántos mensajes hay (se actualiza cada 5 s); **`/api/salas`** da lo mismo en JSON.
+- **`/`** es el chat web (archivo `servidor/src/main/resources/static/index.html`, HTML + JavaScript, mismo protocolo que `chat.jar`).
+- **`/estado`** muestra las 3 salas, quién está y cuántos mensajes hay (se actualiza cada 5 s); **`/api/salas`** da lo mismo en JSON.
 
 ## Probar en tu computador
 
 Requisito: **Java 17 o superior** ([Eclipse Temurin](https://adoptium.net/)).
 
 ```bash
-java -jar servidor.jar                 # servidor en http://localhost:8080  (WebSocket: ws://localhost:8080/chat)
-java -jar chat.jar                     # abre el cliente; abre varios para chatear entre ellos
+java -jar servidor.jar                 # servidor: abre http://localhost:8080 en el navegador para chatear
+java -jar chat.jar                     # (opcional) cliente de escritorio; abre varios para chatear entre ellos
 java -jar chat.jar 192.168.1.20:8080   # cliente apuntando a otro equipo de tu red
 ```
 
+En el navegador: escribe tu nombre, elige sala y **Entrar al chat**. Otros equipos de tu red entran con `http://IP-del-servidor:8080`.
 En `chat.jar`: escribe la dirección del servidor y tu nombre, haz clic en una sala y pulsa **Conectar**. Para cambiarte, clic en otra sala.
 
 Con Kafka (opcional, ver [`kafka/LEEME.md`](kafka/LEEME.md)):
@@ -50,8 +55,9 @@ java -jar servidor.jar --chat.kafka.servidores=localhost:9092
 1. Crea una cuenta en [render.com](https://render.com) entrando con GitHub.
 2. **New → Web Service**, elige el repositorio `emisora_gameshakers_ws`. Render detecta el `Dockerfile` (lenguaje **Docker**). Elige la instancia **Free** y pulsa **Create Web Service**.
    (Otra opción: **New → Blueprint**, que lee `render.yaml` y crea el servicio igual.)
-3. Cuando termine, Render te da un enlace como `https://gameshakers-chat.onrender.com`. Ábrelo en el navegador: debe mostrar las 3 salas.
-4. Comparte ese enlace: cada persona abre `chat.jar` y escribe en **Servidor** `gameshakers-chat.onrender.com` (el cliente usa `wss://…/chat` automáticamente, conexión cifrada).
+3. Cuando termine, Render te da un enlace como `https://emisora-gameshakers-ws.onrender.com`.
+4. **Comparte ese enlace**: quien lo abra entra al chat directamente en el navegador. Con `chat.jar` también se puede entrar escribiendo en **Servidor** el dominio (`emisora-gameshakers-ws.onrender.com`); usa `wss://…/chat` automáticamente.
+5. Cada vez que se sube un cambio a `main`, Render vuelve a desplegar el servidor (si la opción *Auto-Deploy* está activada).
 
 Ten en cuenta:
 - En el plan gratuito, Render **apaga el servicio tras un rato sin uso** y la siguiente conexión tarda en despertarlo (alrededor de un minuto). Abre primero el enlace en el navegador y espera a que cargue.

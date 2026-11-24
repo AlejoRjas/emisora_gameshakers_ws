@@ -13,7 +13,7 @@ import java.util.Map;
 
 /**
  * Páginas para ver desde el navegador que el servidor está vivo y cómo están las salas.
- *   GET /           página con las tres salas
+ *   GET /estado     página con las tres salas (el chat web está en /, archivo static/index.html)
  *   GET /api/salas  lo mismo en JSON
  */
 @RestController
@@ -45,7 +45,7 @@ public class EstadoController {
         return r;
     }
 
-    @GetMapping(value = "/", produces = MediaType.TEXT_HTML_VALUE)
+    @GetMapping(value = "/estado", produces = MediaType.TEXT_HTML_VALUE)
     public String inicio() {
         StringBuilder tarjetas = new StringBuilder();
         for (Sala s : Sala.values()) {
@@ -72,7 +72,7 @@ public class EstadoController {
                 </style></head><body>
                 <header><h1>GameShakers Chat</h1><p>Servidor en línea · 3 salas por WebSocket</p></header>
                 <main>%s</main>
-                <footer>Conéctate con el cliente <code>chat.jar</code> a esta dirección (WebSocket <code>/chat</code>).
+                <footer><a href="/" style="color:#FF3D7F">Entrar al chat</a> · o con el cliente <code>chat.jar</code> (WebSocket <code>/chat</code>).
                 Mensajes por: %s. Esta página se actualiza cada 5 s.</footer>
                 </body></html>
                 """.formatted(tarjetas, escapar(salas.descripcionDifusor()));
