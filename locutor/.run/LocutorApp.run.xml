@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="LocutorApp" type="Application" factoryName="Application" allowRunningInParallel="false">
+    <option name="MAIN_CLASS_NAME" value="org.gameshakers.locutor.LocutorApp" />
+    <module name="radio-locutor" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

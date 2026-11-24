@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="ServidorApp" type="Application" factoryName="Application" allowRunningInParallel="false">
+    <option name="MAIN_CLASS_NAME" value="org.gameshakers.servidor.ServidorApp" />
+    <module name="radio-servidor" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
