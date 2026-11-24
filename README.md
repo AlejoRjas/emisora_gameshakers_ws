@@ -1,89 +1,92 @@
-# GameShakers Radio · WebSocket + Kafka
+# GameShakers Chat · WebSocket (Spring Boot)
 
-Radio por internet con **tres salas**: **Xbox**, **PlayStation** y **PC · Steam**.
-Cada sala tiene su propio locutor (micrófono + música MP3), su chat y su lista de oyentes; los oyentes eligen sala y pueden cambiarse cuando quieran.
+Chat con **tres salas**: **Xbox**, **PlayStation** y **PC · Steam**, sobre **WebSocket**.
+Un servidor Spring Boot aloja las salas; cada persona usa el cliente de escritorio `chat.jar`, elige sala, chatea, ve quién está y puede cambiarse de sala.
 
-| Carpeta | Programa | Quién lo usa | Genera |
-|---|---|---|---|
-| [`servidor/`](servidor) | Servidor WebSocket + Kafka | El equipo central (junto a Kafka) | `servidor.jar` |
-| [`locutor/`](locutor) | Locutor (cliente WebSocket) | Quien transmite en una sala | `locutor.jar` |
-| [`oyente/`](oyente) | Oyente (cliente WebSocket) | Quien escucha | `oyente.jar` |
-| [`kafka/`](kafka) | Configuración y scripts para iniciar Kafka | El equipo del servidor | — |
+| Carpeta | Programa | Genera |
+|---|---|---|
+| [`servidor/`](servidor) | Servidor Spring Boot + WebSocket (Kafka opcional) | `servidor.jar` |
+| [`chat/`](chat) | Cliente de chat de escritorio (Java Swing) | `chat.jar` |
+| [`kafka/`](kafka) | Configuración y scripts para usar Kafka (opcional) | — |
+| `Dockerfile`, `render.yaml` | Para publicar el servidor en Render | — |
 
 ## Arquitectura
 
 ```
- LOCUTOR Xbox ─┐                                  ┌──────────── KAFKA (localhost:9092) ────────────┐
- LOCUTOR PS  ──┤ WebSocket                        │  radio.xbox.audio    radio.playstation.audio   │
- LOCUTOR PC  ──┤ (audio MP3 binario + texto) ──►  │  radio.steam.audio   radio.chat                │
-               │                      SERVIDOR ───┤      ▲ productor             │ consumidor      │
- OYENTES ◄─────┘ WebSocket            (Java)      └──────┼───────────────────────┼─────────────────┘
-   (eligen sala)  ◄── audio y chat de SU sala ───────────┘◄──────────────────────┘
+  chat.jar (Ana)  ─┐                         ┌──────────── SERVIDOR (Spring Boot) ─────────────┐
+  chat.jar (Luis) ─┼── WebSocket /chat ────► │  ChatHandler → SalasChat                        │
+  chat.jar (...)  ─┘   ws:// o wss://        │   Xbox │ PlayStation │ PC·Steam                  │
+        ▲                                    │   (usuarios + historial de cada sala)          │
+        └──── mensajes de SU sala ◄──────────│   Difusor: memoria  ─o─  Kafka (opcional)      │
+                                             │   GET /  y  /api/salas: estado en el navegador  │
+                                             └─────────────────────────────────────────────────┘
 ```
 
-1. El **locutor** mezcla su micrófono con la canción, lo codifica a **MP3 (128 kbps)** y lo envía por **WebSocket** al servidor en trozos de ~52 ms.
-2. El **servidor** publica cada trozo en el tema Kafka de su sala (`radio.<sala>.audio`). Los mensajes de chat van al tema `radio.chat` con la sala como clave.
-3. Un **consumidor Kafka** del servidor lee esos temas y reparte cada registro, por WebSocket, solo a quienes están en esa sala.
-4. El **oyente** guarda un pequeño buffer, decodifica el MP3 y lo reproduce.
+- Cada mensaje pasa por el **difusor** antes de repartirse solo a la sala correspondiente:
+  - **En memoria** (por defecto): no hay que instalar nada; es lo que se usa en Render.
+  - **Kafka** (opcional): se publica en el tema `gameshakers.chat` (clave = sala) y se reparte al consumirlo; el historial queda guardado y se recupera si el servidor se reinicia.
+- Al entrar o cambiar de sala se reciben los **últimos 50 mensajes** de esa sala.
+- La página **`/`** del servidor muestra en el navegador las 3 salas, quién está y cuántos mensajes hay (se actualiza cada 5 s); **`/api/salas`** da lo mismo en JSON.
 
-Requisitos cumplidos: interfaz estética (tema oscuro, ecualizador y vúmetros con el audio real), micrófono del locutor, reproducción simultánea en todos los oyentes de la sala, audio solo en MP3 (la lista solo acepta MP3 válidos y lo que viaja es MP3), 3 salas, chat y lista de oyentes por sala, contraseñas.
+## Probar en tu computador
 
-## Puesta en marcha
-
-Todos los equipos necesitan **Java 17 o superior** (por ejemplo [Eclipse Temurin](https://adoptium.net/)).
-
-1. **Equipo del servidor**: inicia Kafka → ver [`kafka/LEEME.md`](kafka/LEEME.md).
-2. **Equipo del servidor**: abre `servidor.jar`, pon una **clave de locutores** (y si quieres una de oyentes) y pulsa **Encender servidor**. Muestra la dirección a la que se conectan los demás (p. ej. `192.168.1.20:8887`).
-3. **Locutores**: abren `locutor.jar`, escriben esa dirección, eligen sala, su nombre y la clave de locutores → **Salir al aire**. Agregan MP3 y/o abren el micrófono.
-4. **Oyentes**: abren `oyente.jar`, escriben la dirección y su nombre, hacen clic en una sala → **Conectar**. Para cambiar de sala, clic en otra.
+Requisito: **Java 17 o superior** ([Eclipse Temurin](https://adoptium.net/)).
 
 ```bash
-java -jar servidor.jar
-java -jar locutor.jar 192.168.1.20:8887      # la dirección es opcional
-java -jar oyente.jar  192.168.1.20:8887
+java -jar servidor.jar                 # servidor en http://localhost:8080  (WebSocket: ws://localhost:8080/chat)
+java -jar chat.jar                     # abre el cliente; abre varios para chatear entre ellos
+java -jar chat.jar 192.168.1.20:8080   # cliente apuntando a otro equipo de tu red
 ```
 
-### Desde otros lugares (internet)
-Solo el **equipo del servidor** necesita configuración:
-- Redirigir el puerto **TCP 8887** (el de WebSocket) en su router hacia ese equipo, y permitir Java en el Firewall de Windows:
-  `netsh advfirewall firewall add rule name="GameShakers Radio" dir=in action=allow protocol=TCP localport=8887`
-- Compartir la **IP pública** (botón *Consultar* en el servidor). Locutores y oyentes escriben `IP-pública:8887`; los oyentes eligen **Red: Internet** (buffer mayor).
-- **Kafka no se expone**: escucha solo en `localhost`.
-- Si el proveedor de internet usa **CGNAT**, la redirección no funcionará; alternativa: una VPN como Tailscale o ZeroTier.
-- Ancho de banda de subida del servidor: ~135 kbps por oyente (128 kbps de audio más cabeceras; 10 oyentes ≈ 1,35 Mbps).
+En `chat.jar`: escribe la dirección del servidor y tu nombre, haz clic en una sala y pulsa **Conectar**. Para cambiarte, clic en otra sala.
+
+Con Kafka (opcional, ver [`kafka/LEEME.md`](kafka/LEEME.md)):
+```bash
+java -jar servidor.jar --chat.kafka.servidores=localhost:9092
+```
+
+## Publicarlo en internet con Render (para pasar un enlace)
+
+1. Crea una cuenta en [render.com](https://render.com) entrando con GitHub.
+2. **New → Web Service**, elige el repositorio `emisora_gameshakers_ws`. Render detecta el `Dockerfile` (lenguaje **Docker**). Elige la instancia **Free** y pulsa **Create Web Service**.
+   (Otra opción: **New → Blueprint**, que lee `render.yaml` y crea el servicio igual.)
+3. Cuando termine, Render te da un enlace como `https://gameshakers-chat.onrender.com`. Ábrelo en el navegador: debe mostrar las 3 salas.
+4. Comparte ese enlace: cada persona abre `chat.jar` y escribe en **Servidor** `gameshakers-chat.onrender.com` (el cliente usa `wss://…/chat` automáticamente, conexión cifrada).
+
+Ten en cuenta:
+- En el plan gratuito, Render **apaga el servicio tras un rato sin uso** y la siguiente conexión tarda en despertarlo (alrededor de un minuto). Abre primero el enlace en el navegador y espera a que cargue.
+- En Render no hay Kafka: el servidor funciona en memoria, así que el historial se pierde cuando el servicio se reinicia o se duerme.
+- No hay que configurar router ni firewall: Render da la dirección pública.
 
 ## Abrir y generar los .jar en IntelliJ IDEA
-Cada carpeta (`servidor`, `locutor`, `oyente`) es un proyecto Maven independiente:
-1. **File → Open** → elegir la carpeta. IntelliJ descarga las librerías.
-2. Ejecutar con la configuración incluida (`ServidorApp`, `LocutorApp`, `OyenteApp`; la del oyente permite varias ventanas).
-3. Generar el `.jar`: panel **Maven** → *Lifecycle* → **package** (o `mvn package`). Queda en `target/`.
+`servidor/` y `chat/` son proyectos Maven independientes:
+1. **File → Open** → elige la carpeta. IntelliJ descarga las librerías.
+2. Ejecuta con las configuraciones incluidas: **Servidor**, **Servidor con Kafka** o **ChatApp** (esta permite abrir varias ventanas).
+3. Para el `.jar`: panel **Maven** → *Lifecycle* → **package** (o `mvn package`). Queda en `target/servidor.jar` o `target/chat.jar`.
 
-El código común (`org.gameshakers.comun`) está copiado en cada proyecto: si cambias `Protocolo.java`, `Seguridad.java` o `ConexionRadio.java`, cámbialos en todos.
+`Protocolo.java` está en los dos proyectos (`org.gameshakers.comun`): si lo cambias, cámbialo en ambos.
 
-## Protocolo WebSocket (`ws://servidor:8887`)
+## Protocolo WebSocket (`/chat`, mensajes de texto, campos separados por `|`)
 
 | Dirección | Mensaje | Significado |
 |---|---|---|
-| Servidor → cliente | `RETO\|código\|claveOyentes` | Al conectarse: código para probar la contraseña (1 = los oyentes necesitan clave) |
-| Cliente → servidor | `ENTRAR\|rol\|sala\|nombre\|prueba` | rol `LOCUTOR`/`OYENTE`; prueba = HMAC-SHA256(clave, código) |
-| Servidor → cliente | `BIENVENIDO\|rol\|sala\|radio` / `RECHAZO\|motivo` | Resultado |
-| Oyente → servidor | `CAMBIAR\|sala` | Pasarse a otra sala |
-| Cliente → servidor | `CHAT\|texto` | Mensaje (pasa por Kafka `radio.chat`) |
-| Locutor → servidor | `INFO\|título\|mic` | Qué suena y si el micrófono está abierto |
-| Locutor → servidor | *binario* | Audio MP3 (va a Kafka `radio.<sala>.audio`) |
-| Servidor → cliente | `SALAS\|…` · `OYENTES\|…` · `INFO\|…` · `CHAT\|…` · `AVISO\|…` | Estado de las salas, personas, qué suena, chat, avisos |
-| Servidor → oyente | *binario* | Audio MP3 de su sala |
+| Cliente → servidor | `ENTRAR\|sala\|nombre` | Entrar al chat en una sala |
+| Cliente → servidor | `CAMBIAR\|sala` | Pasarse a otra sala |
+| Cliente → servidor | `CHAT\|texto` | Escribir en la sala actual |
+| Servidor → cliente | `BIENVENIDO\|sala\|nombreChat` | Entraste (o te cambiaste) a la sala |
+| Servidor → cliente | `RECHAZO\|motivo` | No se pudo entrar (nombre repetido, sala llena…) y se cierra |
+| Servidor → cliente | `SALAS\|xbox;3\|playstation;1\|steam;2` | Personas en cada sala |
+| Servidor → cliente | `USUARIOS\|sala\|Ana,Luis` | Quién está en tu sala |
+| Servidor → cliente | `CHAT\|sala\|hora\|autor\|texto` | Un mensaje (también los del historial) |
+| Servidor → cliente | `AVISO\|texto` | Alguien entró, salió o se cambió de sala |
 
 Ids de sala: `xbox`, `playstation`, `steam`.
 
-## Seguridad
-- **Contraseñas** de locutores y de oyentes (opcional); nunca viajan: se envía un HMAC del código que manda el servidor.
-- **5 claves incorrectas** desde una IP → bloqueada 1 minuto.
-- **Un locutor por sala**: si la sala ya tiene, se rechaza al segundo.
-- **Máximo de oyentes por sala** (25 por omisión).
-- **Chat**: máximo 300 caracteres y 5 mensajes cada 5 s por persona.
-- Mensajes de más de 64 KB se rechazan; conexiones que no se identifican en 15 s se cierran.
-- Kafka solo escucha en `localhost`.
-- Limitación: la conexión es `ws://` (sin cifrar). Para cifrarla haría falta `wss://` con un certificado TLS.
+## Reglas y protecciones
+- Nombres únicos en todo el servidor (máx. 24 caracteres).
+- Máximo 50 personas por sala.
+- Mensajes de hasta 300 caracteres y máximo 5 cada 5 segundos por persona.
+- Conexiones que no entran a una sala en 15 s se cierran; clientes que no reciben a tiempo se desconectan para no frenar a los demás.
+- Kafka (si se usa) escucha solo en `localhost`.
 
-Librerías: [Java-WebSocket 1.6.0](https://github.com/TooTallNate/Java-WebSocket), kafka-clients 4.4.0, JLayer 1.0.1 (decodificar MP3), jump3r 1.0.5 (codificar MP3), FlatLaf 3.5.4 (apariencia), slf4j-nop.
+Librerías: Spring Boot 4.1.3 (Web + WebSocket), kafka-clients (opcional), FlatLaf 3.5.4 (apariencia del cliente). El cliente usa el WebSocket incluido en Java (`java.net.http`).

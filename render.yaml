@@ -1,0 +1,8 @@
+# Blueprint de Render: crea el servidor de chat como servicio web con Docker (plan gratuito).
+services:
+  - type: web
+    name: gameshakers-chat
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/salas

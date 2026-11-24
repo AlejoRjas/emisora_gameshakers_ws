@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="ChatApp" type="Application" factoryName="Application" allowRunningInParallel="true">
+    <option name="MAIN_CLASS_NAME" value="org.gameshakers.chat.ChatApp" />
+    <module name="chat-cliente" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

@@ -1,5 +1,5 @@
 @echo off
-rem Inicia Kafka para GameShakers Radio (Windows).
+rem Inicia Kafka para GameShakers Chat (Windows).
 rem Kafka debe estar descomprimido en C:\kafka (o define KAFKA_HOME con otra carpeta).
 setlocal
 if "%KAFKA_HOME%"=="" set "KAFKA_HOME=C:\kafka"
@@ -13,8 +13,8 @@ rem La primera vez hay que formatear la carpeta de datos con un identificador de
 if exist "datos\meta.properties" goto arrancar
 for /f %%i in ('call "%KAFKA_HOME%\bin\windows\kafka-storage.bat" random-uuid') do set "KAFKA_ID=%%i"
 echo Formateando la carpeta de datos (id %KAFKA_ID%)...
-call "%KAFKA_HOME%\bin\windows\kafka-storage.bat" format --standalone -t %KAFKA_ID% -c radio-kafka.properties
+call "%KAFKA_HOME%\bin\windows\kafka-storage.bat" format --standalone -t %KAFKA_ID% -c chat-kafka.properties
 :arrancar
 echo Iniciando Kafka en localhost:9092 (no cierres esta ventana)...
-call "%KAFKA_HOME%\bin\windows\kafka-server-start.bat" radio-kafka.properties
+call "%KAFKA_HOME%\bin\windows\kafka-server-start.bat" chat-kafka.properties
 pause

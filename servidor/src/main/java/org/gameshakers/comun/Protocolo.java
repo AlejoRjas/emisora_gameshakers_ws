@@ -1,43 +1,41 @@
 package org.gameshakers.comun;
 
-import javax.sound.sampled.AudioFormat;
 import java.awt.Color;
 
 /**
- * Reglas que comparten el servidor, el locutor y el oyente.
- * (Este archivo es igual en los tres proyectos: si lo cambias, cámbialo en todos.)
+ * Reglas que comparten el servidor y el cliente de chat.
+ * (Este archivo es igual en los dos proyectos: si lo cambias, cámbialo en ambos.)
  *
- * Locutores y oyentes se conectan al servidor por WebSocket (ws://servidor:puerto).
- * Dentro del servidor, el audio y el chat de cada sala pasan por Kafka.
+ * Los clientes se conectan al servidor por WebSocket (ws://servidor:puerto).
+ * Dentro del servidor, todos los mensajes de chat pasan por Kafka (tema {@link #TEMA_KAFKA}).
  *
- * Mensajes de texto (campos separados por |, el último puede contener |):
- *
- *   Servidor -> cliente
- *     RETO|codigo|claveOyentes(1/0)        al conectarse; el código sirve para probar la contraseña
- *     BIENVENIDO|rol|sala|nombreRadio
- *     RECHAZO|motivo                        y luego se cierra la conexión
- *     SALAS|sala;locutor;oyentes;titulo;mic|...   estado de las 3 salas
- *     OYENTES|sala|locutor|nombre1,nombre2,...
- *     INFO|sala|titulo|mic(1/0)|locutor
- *     CHAT|sala|hora|autor|rol|texto
- *     AVISO|texto
- *     (binario)                            audio MP3 de la sala en la que está el oyente
+ * Mensajes de texto (campos separados por |; el último puede contener |):
  *
  *   Cliente -> servidor
- *     ENTRAR|rol|sala|nombre|prueba         prueba = HMAC-SHA256(contraseña, codigo) o vacía
- *     CAMBIAR|sala                          (oyente) pasarse a otra sala
- *     CHAT|texto
- *     INFO|titulo|mic(1/0)                  (locutor) qué está sonando
- *     (binario)                            (locutor) audio MP3 de su sala
+ *     ENTRAR|sala|nombre          entrar al chat en una sala
+ *     CAMBIAR|sala                pasarse a otra sala
+ *     CHAT|texto                  escribir en la sala actual
+ *
+ *   Servidor -> cliente
+ *     BIENVENIDO|sala|nombreChat
+ *     RECHAZO|motivo              y luego se cierra la conexión
+ *     SALAS|sala;usuarios|...     cuántas personas hay en cada sala
+ *     USUARIOS|sala|n1,n2,...     quién está en tu sala
+ *     CHAT|sala|hora|autor|texto  un mensaje (también los del historial al entrar)
+ *     AVISO|texto                 alguien entró o salió, etc.
  */
 public final class Protocolo {
 
-    public static final String NOMBRE_RADIO = "GameShakers Radio";
-    public static final int PUERTO_PREDETERMINADO = 8887;
+    public static final String NOMBRE_CHAT = "GameShakers Chat";
+    public static final int PUERTO_PREDETERMINADO = 8080;
+    public static final String RUTA_WEBSOCKET = "/chat";
     public static final String KAFKA_PREDETERMINADO = "localhost:9092";
-    public static final int MAX_OYENTES_POR_SALA = 25;
+    public static final String TEMA_KAFKA = "gameshakers.chat";
+    public static final int MAX_USUARIOS_POR_SALA = 50;
+    public static final int MAX_CHAT = 300;
+    public static final int MAX_HISTORIAL = 50;
 
-    /** Las tres salas de la radio. */
+    /** Las tres salas de chat. */
     public enum Sala {
         XBOX("xbox", "Xbox", new Color(0x10, 0x7C, 0x10)),
         PLAYSTATION("playstation", "PlayStation", new Color(0x00, 0x6F, 0xCD)),
@@ -64,34 +62,17 @@ public final class Protocolo {
         }
     }
 
-    public static final String LOCUTOR = "LOCUTOR";
-    public static final String OYENTE = "OYENTE";
-
-    public static final String RETO = "RETO";
+    public static final String ENTRAR = "ENTRAR";
+    public static final String CAMBIAR = "CAMBIAR";
+    public static final String CHAT = "CHAT";
     public static final String BIENVENIDO = "BIENVENIDO";
     public static final String RECHAZO = "RECHAZO";
     public static final String SALAS = "SALAS";
-    public static final String OYENTES = "OYENTES";
-    public static final String INFO = "INFO";
-    public static final String CHAT = "CHAT";
+    public static final String USUARIOS = "USUARIOS";
     public static final String AVISO = "AVISO";
-    public static final String ENTRAR = "ENTRAR";
-    public static final String CAMBIAR = "CAMBIAR";
 
     public static final String SEP = "|";
     public static final String SEP_REGEX = "\\|";
-    public static final int MAX_CHAT = 300;
-
-    /** Formato del audio que el locutor mezcla y codifica a MP3. */
-    public static final float FRECUENCIA = 44_100f;
-    public static final int MUESTRAS_POR_TRAMA = 1152;
-    public static final int KBPS = 128;
-    /** Tramas MP3 por mensaje (≈52 ms de audio). */
-    public static final int TRAMAS_POR_PAQUETE = 2;
-
-    public static AudioFormat formatoPcm(int canales) {
-        return new AudioFormat(FRECUENCIA, 16, canales, true, false);
-    }
 
     /** Quita los caracteres que el protocolo usa como separadores. */
     public static String limpiarNombre(String nombre) {
@@ -99,11 +80,35 @@ public final class Protocolo {
         return n.length() > 24 ? n.substring(0, 24) : n;
     }
 
-    /** Admite "host", "host:puerto" o "ws://host:puerto"; devuelve la URI WebSocket. */
+    /**
+     * Convierte lo que escribe el usuario en la dirección WebSocket del servidor:
+     *   "localhost"                      -> ws://localhost:8080/chat
+     *   "192.168.1.20:8080"              -> ws://192.168.1.20:8080/chat
+     *   "miapp.onrender.com"             -> wss://miapp.onrender.com/chat   (dominio en internet: conexión cifrada)
+     *   "https://miapp.onrender.com"     -> wss://miapp.onrender.com/chat
+     *   "ws://..." o "wss://..."         -> se usa tal cual (agregando /chat si no trae ruta)
+     */
     public static String uriServidor(String texto) {
         String t = texto.strip();
-        if (t.startsWith("ws://") || t.startsWith("wss://")) return t;
-        return "ws://" + (t.contains(":") ? t : t + ":" + PUERTO_PREDETERMINADO);
+        if (t.endsWith("/")) t = t.substring(0, t.length() - 1);
+        String esquema;
+        if (t.startsWith("ws://") || t.startsWith("wss://")) {
+            esquema = t.substring(0, t.indexOf("://"));
+            t = t.substring(t.indexOf("://") + 3);
+        } else if (t.startsWith("https://")) {
+            esquema = "wss";
+            t = t.substring(8);
+        } else if (t.startsWith("http://")) {
+            esquema = "ws";
+            t = t.substring(7);
+        } else {
+            String host = t.contains("/") ? t.substring(0, t.indexOf('/')) : t;
+            boolean local = host.contains(":") || host.startsWith("localhost") || host.matches("[0-9.]+");
+            esquema = local ? "ws" : "wss";
+            if (local && !host.contains(":")) t = host + ":" + PUERTO_PREDETERMINADO + t.substring(host.length());
+        }
+        if (!t.contains("/")) t = t + RUTA_WEBSOCKET;
+        return esquema + "://" + t;
     }
 
     private Protocolo() {

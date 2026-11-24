@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Servidor con Kafka" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="org.gameshakers.servidor.ChatServidorApplication" />
+    <module name="chat-servidor" />
+    <option name="PROGRAM_PARAMETERS" value="--chat.kafka.servidores=localhost:9092" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

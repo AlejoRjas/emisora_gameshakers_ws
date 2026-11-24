@@ -1,0 +1,4 @@
+**/target/
+chat/
+kafka/datos/
+.git/

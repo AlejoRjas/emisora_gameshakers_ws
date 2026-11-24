@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Inicia Kafka para GameShakers Radio (Linux / macOS).
+# Inicia Kafka para GameShakers Chat (Linux / macOS).
 # Uso: KAFKA_HOME=/ruta/a/kafka_2.13-4.4.0 ./iniciar-kafka.sh
 set -e
 cd "$(dirname "$0")"
@@ -11,6 +11,6 @@ fi
 # La primera vez hay que formatear la carpeta de datos con un identificador de clúster
 if [ ! -f datos/meta.properties ]; then
   ID="$("$KAFKA_HOME/bin/kafka-storage.sh" random-uuid)"
-  "$KAFKA_HOME/bin/kafka-storage.sh" format --standalone -t "$ID" -c radio-kafka.properties
+  "$KAFKA_HOME/bin/kafka-storage.sh" format --standalone -t "$ID" -c chat-kafka.properties
 fi
-exec "$KAFKA_HOME/bin/kafka-server-start.sh" radio-kafka.properties
+exec "$KAFKA_HOME/bin/kafka-server-start.sh" chat-kafka.properties
